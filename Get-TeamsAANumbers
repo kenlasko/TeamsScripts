@@ -1,10 +1,10 @@
 $AAList = Get-CsAutoAttendant
-New-Item -Path AAPhoneNum.csv -Value "Name,PhoneNumber`r`n" -Force | Out-Null
+New-Item -Path AAPhoneNums.csv -Value "Name,PhoneNumber`r`n" -Force | Out-Null
 ForEach ($AA in $AAList) {
 	ForEach ($AppInstance in $AA.ApplicationInstances) {
 		$AAName = $AA.Name
   		$AppPhoneNum = (Get-CsOnlineApplicationInstance -Identity $AppInstance).PhoneNumber
 		Write-Host "$AAName  $AppPhoneNum"
-		Add-Content -Path AAPhoneNum.csv -Value "$AAName,$AppPhoneNum"
+		Add-Content -Path AAPhoneNums.csv -Value "$AAName,$AppPhoneNum"
 	}
 }
