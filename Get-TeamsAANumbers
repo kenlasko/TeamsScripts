@@ -1,3 +1,5 @@
+# Teams PowerShell doesn't make it easy to obtain a list of Auto-Attendants along with their assigned phone number(s).
+
 $AAList = Get-CsAutoAttendant
 New-Item -Path AAPhoneNums.csv -Value "Name,PhoneNumber`r`n" -Force | Out-Null
 ForEach ($AA in $AAList) {
