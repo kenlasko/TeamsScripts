@@ -1,0 +1,14 @@
+# This will wipe out all Teams Enterprise Voice configuration, except for existing PSTN gateways.
+# Great for testing out new dialplans from places like UCDialplans.com
+
+Get-CsTenantDialPlan | Remove-CsTenantDialPlan
+Get-CsOnlineVoiceRoute | Remove-CsOnlineVoiceRoute
+Get-CsOnlineVoiceRoutingPolicy | Remove-CsOnlineVoiceRoutingPolicy
+Set-CsOnlinePstnUsage Global -Usage $NULL
+$GWList = Get-CsOnlinePSTNGateway
+
+ForEach ($GW in $GWList) { 
+  Set-CsOnlinePSTNGateway -Identity $GW.FQDN -OutboundTeamsNumberTranslationRules $NULL -OutboundPSTNNumberTranslationRules $NULL -InboundTeamsNumberTranslationRules $NULL -InboundPSTNNumberTranslationRules $NULL 
+}
+
+Get-CsTeamsTranslationRule | Remove-CsTeamsTranslationRule
