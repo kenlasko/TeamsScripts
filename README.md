@@ -8,11 +8,11 @@ Can be run directly from an SfB server via **Get-CsLisSubnet | Copy-SfBLISSubnet
 
 To load the module, open a PowerShell window and type **. .\SfBLISMigrationTools.ps1** (the 2 dots at the beginning are important)
 
-## Reset-TeamsEVToFactory
-This will wipe out all Teams Enterprise Voice configuration, except for existing PSTN gateways. Great for testing out new dialplans from places like UCDialplans.com
-
 ## Remove-TeamsLISConfig
 Wipes out all the civic addresses, locations and subnets from a Teams LIS database. Handy when testing migrations, and you screw something up.
+
+## Reset-TeamsEVToFactory
+This will wipe out all Teams Enterprise Voice configuration, except for existing PSTN gateways. Great for testing out new dialplans from places like UCDialplans.com
 
 ## Get-TeamsAANumbers
 Teams PowerShell doesn't make it easy to obtain a list of Auto-Attendants along with their assigned phone number(s). This little script makes it easy.
