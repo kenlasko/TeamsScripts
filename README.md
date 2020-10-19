@@ -10,7 +10,7 @@ Then run:
 * Import-Csv LISSubnets.csv | Copy-SfBLISSubnetsToTeams (using a CSV file export using Get-CsLisSubnet from another machine)
 
 ## Remove-TeamsLISConfig
-Wipes out all the civic addresses, locations and subnets from a Teams LIS database. Handy when testing migrations, and you screw something up.
+Wipes out all the civic addresses, locations and subnets from a Teams LIS database. Handy when testing migrations, and you screw something up (not like that would ever happen).
 
 ## Reset-TeamsEVToFactory
 This will wipe out all Teams Enterprise Voice configuration, except for existing PSTN gateways. Great for testing out new dialplans from places like UCDialplans.com
