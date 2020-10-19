@@ -1,0 +1,11 @@
+# Wipes out all the civic addresses, locations and subnets from a Teams LIS database. 
+# Handy when testing migrations, and you screw something up.
+
+$Subnets = Get-CsOnlineLisSubnet
+Foreach ($Subnet in $subnets) {Remove-CsOnlineLisSubnet -subnet $Subnet.Subnet}
+
+$Locations = Get-CsOnlineLisLocation
+Foreach ($Loc in $Locations) {Remove-CsOnlineLisLocation -LocationId $Loc.LocationID}
+
+$Addresses = Get-CsOnlineLisCivicAddress
+ForEach ($Addr in $Addresses) {Remove-CsOnlineLisCivicAddress -CivicAddressId $Addr.CivicAddressID}
