@@ -1,0 +1,301 @@
+Function Copy-SfBLISSubnetsToTeams {
+	<#
+		.SYNOPSIS
+		Copies an on-prem Skype for Business LIS location and subnet database to Teams
+
+		.DESCRIPTION
+		Copies an on-prem Skype for Business LIS location and subnet database to Teams. 
+		
+		.PARAMETER Subnet
+		The Dubnet to copy from the on-prem SfB LIS database
+		
+		.PARAMETER Description
+		The Description to copy	from the on-prem SfB LIS database
+
+		.PARAMETER Location
+		The Location to copy from the on-prem SfB LIS database
+		
+		.PARAMETER Description
+		The Description to copy	from the on-prem SfB LIS database	
+		
+		.PARAMETER HouseNumber
+		The HouseNumber to copy	from the on-prem SfB LIS database		
+
+		.PARAMETER HouseNumberSuffix
+		The HouseNumberSuffix to copy from the on-prem SfB LIS database		
+			
+		.PARAMETER PreDirectional
+		The PreDirectional to copy from the on-prem SfB LIS database		
+
+		.PARAMETER StreetName
+		The StreetName to copy from the on-prem SfB LIS database		
+
+		.PARAMETER PostDirectional
+		The PostDirectional to copy from the on-prem SfB LIS database		
+
+		.PARAMETER City
+		The City to copy from the on-prem SfB LIS database		
+
+		.PARAMETER State
+		The State to copy from the on-prem SfB LIS database		
+
+		.PARAMETER PostalCode
+		The PostalCode to copy from the on-prem SfB LIS database		
+
+		.PARAMETER Country
+		The Country to copy from the on-prem SfB LIS database		
+
+		.PARAMETER SkipGeoLocate
+		Don't attempt to performe a geo-locate on the location
+		
+		.EXAMPLE
+		Get-CsLisSubnet | Copy-SfBLISSubnetsToTeams
+		Copies all Skype for Business LIS subnets and associated locations/civic addresses directly from SfB
+
+		.EXAMPLE
+		Import-Csv LISSubnets.csv | Copy-SfBLISSubnetsToTeams
+		Copies all Skype for Business LIS subnets and associated locations/civic addresses from a CSV export
+		from SfB via the Get-CsLisSubnet command
+				
+		.NOTES
+		Version 1.00
+		Build: Oct 18, 2020
+		Copyright © 2020  Ken Lasko
+		klasko@ucdialplans.com
+		https://www.ucdialplans.com
+	#>
+	
+	Param (
+		[Parameter(ValueFromPipelineByPropertyName, Mandatory=$False)]
+		[string]$Subnet,
+		[Parameter(ValueFromPipelineByPropertyName, Mandatory=$False)]
+		[string]$Description,
+		[Parameter(ValueFromPipelineByPropertyName, Mandatory=$False)]
+		[string]$Location,
+		[Parameter(ValueFromPipelineByPropertyName, Mandatory=$False)]
+		[string]$CompanyName,
+		[Parameter(ValueFromPipelineByPropertyName, Mandatory=$False)]
+		[string]$HouseNumber,
+		[Parameter(ValueFromPipelineByPropertyName, Mandatory=$False)]
+		[string]$HouseNumberSuffix,
+		[Parameter(ValueFromPipelineByPropertyName, Mandatory=$False)]
+		[string]$PreDirectional,
+		[Parameter(ValueFromPipelineByPropertyName, Mandatory=$False)]
+		[string]$StreetName,
+		[Parameter(ValueFromPipelineByPropertyName, Mandatory=$False)]
+		[string]$PostDirectional,
+		[Parameter(ValueFromPipelineByPropertyName, Mandatory=$False)]
+		[string]$City,
+		[Parameter(ValueFromPipelineByPropertyName, Mandatory=$False)]
+		[string]$State,
+		[Parameter(ValueFromPipelineByPropertyName, Mandatory=$False)]
+		[string]$PostalCode,
+		[Parameter(ValueFromPipelineByPropertyName, Mandatory=$False)]
+		[string]$Country,	
+		[parameter(Mandatory=$False)]
+		[switch]$SkipGeoLocate
+	)
+	
+	Begin {
+		If ((Get-PSSession | Where-Object -FilterScript {
+				 $_.ComputerName -like '*.online.lync.com'
+		}).State -eq 'Opened') {
+			Write-Host -Object 'Using existing session credentials'
+		} 
+		Else {
+			Write-Host -Object 'Logging into Office 365...'
+		   
+			If ($OverrideAdminDomain) {
+				$O365Session = (New-CsOnlineSession -OverrideAdminDomain $OverrideAdminDomain)
+			}
+			Else {
+				$O365Session = (New-CsOnlineSession)
+			}
+			$null = (Import-PSSession -Session $O365Session -AllowClobber)
+		}
+	}
+	
+	Process {
+#	ForEach ($Entry in $LISDatabase) {
+		#Check for existing location in online LIS database
+		Write-Host "Working on $($Subnet) in $($Location)"
+		$ExistingAddresses = @()
+		$ExistingAddresses += Get-CsOnlineLisCivicAddress -City $City -CountryorRegion $Country
+		
+		Switch ($ExistingAddresses.Count) {
+			0 {
+				#Remove empty elements
+				$psobject.Properties | Where-Object -FilterScript { -not $_.value } | ForEach-Object -Process { $psobject.Properties.Remove($_.name) }
+
+				#Convert to hashtable
+				$Hash = @{}
+				$psobject.properties | Foreach { $Hash[$_.Name] = $_.Value }
+
+				#Remove invalid from hash to prevent issues with creating new civic address/location
+				$Hash.Remove("Subnet")
+				$Hash.Remove("Description")
+
+				#Get lat/long
+				If (!$SkipGeoLocate) {
+					$LatLong = Get-LatLong "$($HouseNumber) $($StreetName) $($StreetSuffix) $($City) $($State) $($Country)"
+					$Hash.Add('Latitude', $LatLong.Latitude)
+					$Hash.Add('Longitude', $LatLong.Longitude)
+				}
+					
+				# Create civic address/location
+				Write-Host "Creating location/civic address for $($Location) $($City)"
+				$NewLoc = New-CsOnlineLisLocation @Hash
+
+				# Assign subnet to location
+				Write-Host "Assigning $($Subnet) to $($Location)"
+				Set-CsOnlineLISSubnet -Subnet $Subnet -Description $Description -LocationID $NewLoc.LocationID
+				Break
+			}
+			1 {
+				Write-Host "One match found for address $($HouseNumber) $($StreetName) $($StreetSuffix) $($City) $($State) $($Country)"
+				# Check for existing location at given civic address/location
+				$ExistingLocation = Get-CsOnlineLisLocation -CivicAddressId $ExistingAddresses.CivicAddressId | Where {$_.Location -eq $Location}
+			
+				If ($ExistingLocation) {
+					Write-Host "Assigning $($Subnet) to $($Location)"
+					Set-CsOnlineLISSubnet -Subnet $Subnet -Description $Description -LocationID $ExistingLocation.LocationID
+				}
+				Else {
+					Write-Host "Creating new $($Location) location for $($City)"
+					$NewLoc = New-CsOnlineLisLocation -Location $Location -CivicAddressId $ExistingAddresses.CivicAddressId
+					# Assign subnet to location
+					Write-Host "Assigning $($Subnet) to $($Location)"
+					Set-CsOnlineLISSubnet -Subnet $Subnet -Description $Description -LocationID $NewLoc.LocationID
+				}
+				Break
+			}
+			Default {
+				Write-Host "Multiple matches found for address in $($City) $($Country)"
+				$MatchFound = $FALSE
+				ForEach ($Addr in $ExistingAddresses) {
+					If ($Addr.HouseNumber -eq $HouseNumber -And
+						$Addr.StreetName -eq $StreetName -And
+						$Addr.State -eq $StateorProvince -And
+						$Addr.PostalCode -eq $PostalCode) {
+						
+						$MatchFound = $TRUE
+						Write-Host "Match found for address $($HouseNumber) $($StreetName) $($StreetSuffix) $($City) $($State) $($Country)"
+
+						# Check for existing location at given civic address/location
+						$ExistingLocation = Get-CsOnlineLisLocation -CivicAddressId $Addr.CivicAddressId | Where {$_.Location -eq $Location}
+
+						If ($ExistingLocation) {
+							Write-Host "Assigning $($Subnet) to $($Location)"
+							Set-CsOnlineLISSubnet -Subnet $Subnet -Description $Description -LocationID $ExistingLocation.LocationID
+						}
+						Else {
+							Write-Host "Creating new $($Location) location for $($City)"
+							$NewLoc = New-CsOnlineLisLocation -Location $Location -CivicAddressId $Addr.CivicAddressId
+							# Assign subnet to location
+							Write-Host "Assigning $($Subnet) to $($Location)"
+							Set-CsOnlineLISSubnet -Subnet $Subnet -Description $Description -LocationID $NewLoc.LocationID							
+						}
+						Break
+					}
+				}
+				If (!$MatchFound) { 
+					Write-Host "No match found for address $($HouseNumber) $($StreetName) $($StreetSuffix) $($City) $($State) $($Country)"
+					#Remove empty elements
+					$psobject.Properties | Where-Object -FilterScript { -not $_.value } | ForEach-Object -Process { $psobject.Properties.Remove($_.name) }
+
+					#Convert to hashtable
+					$Hash = @{}
+					$psobject.properties | Foreach { $Hash[$_.Name] = $_.Value }
+
+					#Remove invalid from hash to prevent issues with creating new civic address/location
+					$Hash.Remove("Subnet")
+					$Hash.Remove("Description")
+
+					#Get lat/long
+					$LatLong = Get-LatLong "$($HouseNumber) $($StreetName) $($StreetSuffix) $($City) $($State) $($Country)"
+					$Hash.Add('Latitude', $LatLong.Latitude)
+					$Hash.Add('Longitude', $LatLong.Longitude)
+						
+					# Create civic address/location
+					Write-Host "Creating location/civic address for $($Location) $($City)"
+					$NewLoc = New-CsOnlineLisLocation @Hash
+
+					# Assign subnet to location
+					Write-Host "Assigning $($Subnet) to $($Location)"
+					Set-CsOnlineLISSubnet -Subnet $Subnet -Description $Description -LocationID $NewLoc.LocationID
+				}
+			}
+		}
+	}
+}
+
+
+
+Function Get-LatLong {
+	<#
+		.SYNOPSIS
+		Returns the geographical coordinates for an address.
+
+		.DESCRIPTION
+		Returns the geographical coordinates for an address.
+		
+		.PARAMETER Address
+		The address of the location to return information on. Include as much detail as possible.
+			
+		.EXAMPLE
+		Get-LatLong -Address "33 Main Street, Jonestown, NY, USA"
+		Retrieves the latitude/longitude for the selected location
+		
+		.NOTES
+		Version 1.0
+		Build: Oct 18, 2020
+		Copyright © 2020  Ken Lasko
+		klasko@ucdialplans.com
+		https://www.ucdialplans.com
+	#>
+	
+    Param(
+		[Parameter(Mandatory=$true, ValueFromPipeline=$true)]
+		[String]$Address
+    )
+
+	Begin {
+		$GoogleGeoAPIKey = [System.Environment]::GetEnvironmentVariable('GoogleGeocode_API_Key','user')
+		If(!$GoogleGeoAPIKey) {
+			Write-Host -ForegroundColor Red "You need to register for an API key and save it as persistent environment variable called GoogleGeocode_API_Key on this machine. Follow this link to get an API Key - http://developers.google.com/maps/documentation/geocoding/get-api-key "
+			$GoogleGeoAPIKey = Read-Host "Enter a valid Google API key to be saved as environment variable GoogleGeocode_API_Key"
+			[System.Environment]::SetEnvironmentVariable('GoogleGeocode_API_Key', $GoogleGeoAPIKey,[System.EnvironmentVariableTarget]::User)
+		}
+	}
+	Process {
+		Try	{
+			$JSON = Invoke-RestMethod -Method GET -Uri "https://maps.googleapis.com/maps/api/geocode/json?address=$Address&key=$GoogleGeoAPIKey" -ErrorVariable EV
+			$Status = $JSON.Status
+			
+			[double]$Lat = $JSON.results.geometry.location.lat
+			[double]$Lng = $JSON.results.geometry.location.lng
+			
+			$LatLong = New-Object PSObject
+			
+			If($Status -eq "OK") {
+				$LatLong | Add-Member -type NoteProperty -Name 'Latitude' -Value $Lat
+				$LatLong | Add-Member -type NoteProperty -Name 'Longitude' -Value $Lng
+			}
+			ElseIf ($Status -eq 'ZERO_RESULTS') {
+				$LatLong | Add-Member -type NoteProperty -Name 'Latitude' -Value 0
+				$LatLong | Add-Member -type NoteProperty -Name 'Longitude' -Value 0                
+			}
+			Else {
+				$ErrorMessage = $JSON.error_message
+				Write-Host -ForegroundColor Yellow "WARNING: Address geolocation failed for the following reason: $Status - $ErrorMessage"
+				$LatLong | Add-Member -type NoteProperty -Name 'Latitude' -Value 0
+				$LatLong | Add-Member -type NoteProperty -Name 'Longitude' -Value 0
+			}
+		}
+		Catch {
+			"Something went wrong. Please try again."
+			$EV.message
+		}
+		Return $LatLong
+	}
+}
