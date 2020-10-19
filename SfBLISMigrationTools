@@ -231,6 +231,59 @@ Function Copy-SfBLISSubnetsToTeams {
 
 
 
+Function Remove-OnlineLISConfig {
+	<#
+		.SYNOPSIS
+		Removes all Teams LIS information
+
+		.DESCRIPTION
+		Removes all Teams LIS information. Does not affect any object that is tied to a user account or phone number. 
+		
+		.NOTES
+		Version 1.00
+		Build: Oct 18, 2020
+		Copyright © 2020  Ken Lasko
+		klasko@ucdialplans.com
+		https://www.ucdialplans.com
+	#>
+	
+	Write-Host 'This command will remove all Teams LIS configuration settings and cannot be undone.'
+	Write-Host 'It will not remove any entities that are tied to a user or phone number'
+	Write-Host
+	Write-Host 'To confirm, press C, then ENTER'
+	Write-Host 'To exit, press any other key followed by ENTER'
+	Write-Host
+	$Confirm = Read-Host 'Confirm?'
+
+	If ($Confirm -match "[Cc]") {
+		Write-Host 'Removing Teams LIS config...'
+		$Subnets = Get-CsOnlineLisSubnet
+		Foreach ($Subnet in $Subnets){Remove-CsOnlineLisSubnet -Subnet $Subnet.Subnet}
+
+		$Ports = Get-CsOnlineLisPort
+		Foreach ($Port in $Ports){Remove-CsOnlineLisPort -PortID $Port.PortID}
+
+		$Ports = Get-CsOnlineLisPort
+		Foreach ($Port in $Ports){Remove-CsOnlineLisPort -PortID $Port.PortID}
+
+		$Switches = Get-CsOnlineLisSwitch
+		Foreach ($Switch in $Switches){Remove-CsOnlineLisSwitch -ChassisID $Switch.ChassisID}
+
+		$WAPs = Get-CsOnlineLisWirelessAccessPoint
+		Foreach ($WAP in $WAPs){Remove-CsOnlineLisWirelessAccessPoint -BSSID $WAP.BSSID}
+
+		$Locations = Get-CsOnlineLisLocation
+		Foreach ($Loc in $Locations) {Remove-CsOnlineLisLocation -LocationID $Loc.LocationID -ErrorAction Continue}
+
+		$Addresses = Get-CsOnlineLisCivicAddress
+		ForEach ($Addr in $Addresses){Remove-CsOnlineLisCivicAddress -CivicAddressID $Addr.CivicAddressID -ErrorAction Continue}
+		
+		Write-Host 'Done!'
+	}
+}
+
+
+
 Function Get-LatLong {
 	<#
 		.SYNOPSIS
