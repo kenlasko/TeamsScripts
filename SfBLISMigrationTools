@@ -231,7 +231,7 @@ Function Copy-SfBLISSubnetsToTeams {
 
 
 
-Function Remove-OnlineLISConfig {
+Function Remove-TeamsLISConfig {
 	<#
 		.SYNOPSIS
 		Removes all Teams LIS information
