@@ -6,8 +6,8 @@ Migrates SfB Location Information Database (LIS) civic address, location and sub
 
 To load the module, open a PowerShell window and type **. .\SfBLISMigrationTools.ps1** (the 2 dots at the beginning are important).
 Then run:
-* Get-CsLisSubnet | Copy-SfBLISSubnetsToTeams (directly from a SfB server)
-* Import-Csv LISSubnets.csv | Copy-SfBLISSubnetsToTeams (using a CSV file export using Get-CsLisSubnet from another machine)
+* **Get-CsLisSubnet | Copy-SfBLISSubnetsToTeams** (directly from a SfB server)
+* **Import-Csv LISSubnets.csv | Copy-SfBLISSubnetsToTeams** (using a CSV file export using Get-CsLisSubnet from another machine)
 
 ## Remove-TeamsLISConfig
 Wipes out all the civic addresses, locations and subnets from a Teams LIS database. Handy when testing migrations, and you screw something up (not like that would ever happen).
