@@ -20,7 +20,7 @@ Function Copy-SfBLISSubnetsToTeams {
 		
 		.PARAMETER HouseNumber
 		The HouseNumber to copy	from the on-prem SfB LIS database		
-
+ 
 		.PARAMETER HouseNumberSuffix
 		The HouseNumberSuffix to copy from the on-prem SfB LIS database		
 			
@@ -58,8 +58,8 @@ Function Copy-SfBLISSubnetsToTeams {
 		from SfB via the Get-CsLisSubnet command
 				
 		.NOTES
-		Version 1.00
-		Build: Oct 18, 2020
+		Version 1.10
+		Build: Oct 28, 2020
 		Copyright © 2020  Ken Lasko
 		klasko@ucdialplans.com
 		https://www.ucdialplans.com
@@ -91,14 +91,17 @@ Function Copy-SfBLISSubnetsToTeams {
 		[Parameter(ValueFromPipelineByPropertyName, Mandatory=$False)]
 		[string]$PostalCode,
 		[Parameter(ValueFromPipelineByPropertyName, Mandatory=$False)]
-		[string]$Country,	
+		[Alias("Country")]
+		[string]$CountryOrRegion,	
 		[parameter(Mandatory=$False)]
-		[switch]$SkipGeoLocate
+		[switch]$SkipGeoLocate,
+		[parameter(Mandatory=$False)]
+		[string]$OverrideAdminDomain
 	)
 	
 	Begin {
 		If ((Get-PSSession | Where-Object -FilterScript {
-				 $_.ComputerName -like '*.online.lync.com'
+				 $_.ComputerName -eq 'api.interfaces.records.teams.microsoft.com'
 		}).State -eq 'Opened') {
 			Write-Host -Object 'Using existing session credentials'
 		} 
@@ -116,35 +119,39 @@ Function Copy-SfBLISSubnetsToTeams {
 	}
 	
 	Process {
-#	ForEach ($Entry in $LISDatabase) {
 		#Check for existing location in online LIS database
 		Write-Host "Working on $($Subnet) in $($Location)"
 		$ExistingAddresses = @()
-		$ExistingAddresses += Get-CsOnlineLisCivicAddress -City $City -CountryorRegion $Country
+		$ExistingAddresses += Get-CsOnlineLisCivicAddress -City $City -CountryorRegion $CountryOrRegion
 		
+		$Item = $PSItem
+
 		Switch ($ExistingAddresses.Count) {
 			0 {
-				#Remove empty elements
-				$psobject.Properties | Where-Object -FilterScript { -not $_.value } | ForEach-Object -Process { $psobject.Properties.Remove($_.name) }
-
 				#Convert to hashtable
 				$Hash = @{}
-				$psobject.properties | Foreach { $Hash[$_.Name] = $_.Value }
+				$Item | Get-Member -MemberType *Property | % { If ($Item.($_.name) -ne '') {$Hash.($_.name) = $Item.($_.name)} } 
 
 				#Remove invalid from hash to prevent issues with creating new civic address/location
-				$Hash.Remove("Subnet")
-				$Hash.Remove("Description")
+				$Hash.Remove('Subnet')
+				$Hash.Remove('Description')
 
 				#Get lat/long
 				If (!$SkipGeoLocate) {
-					$LatLong = Get-LatLong "$($HouseNumber) $($StreetName) $($StreetSuffix) $($City) $($State) $($Country)"
+					$LatLong = Get-LatLong "$($HouseNumber) $($StreetName) $($StreetSuffix) $($City) $($State) $($CountryOrRegion)"
 					$Hash.Add('Latitude', $LatLong.Latitude)
 					$Hash.Add('Longitude', $LatLong.Longitude)
 				}
+				
+				#Remove fields that aren't needed for civic address
+				$Hash.Remove('Location')
 					
-				# Create civic address/location
-				Write-Host "Creating location/civic address for $($Location) $($City)"
-				$NewLoc = New-CsOnlineLisLocation @Hash
+				# Create civic address
+				Write-Host "Creating civic address for $($Location) $($City)"
+				$NewCivic = New-CsOnlineLisCivicAddress @Hash
+				
+				Write-Host "Creating default location for $($Location) $($City)"
+				$NewLoc = New-CsOnlineLisLocation -Location $Location -CivicAddressId $NewCivic.CivicAddressId
 
 				# Assign subnet to location
 				Write-Host "Assigning $($Subnet) to $($Location)"
@@ -152,7 +159,7 @@ Function Copy-SfBLISSubnetsToTeams {
 				Break
 			}
 			1 {
-				Write-Host "One match found for address $($HouseNumber) $($StreetName) $($StreetSuffix) $($City) $($State) $($Country)"
+				Write-Host "One match found for address $($HouseNumber) $($StreetName) $($StreetSuffix) $($City) $($State) $($CountryOrRegion)"
 				# Check for existing location at given civic address/location
 				$ExistingLocation = Get-CsOnlineLisLocation -CivicAddressId $ExistingAddresses.CivicAddressId | Where {$_.Location -eq $Location}
 			
@@ -170,7 +177,7 @@ Function Copy-SfBLISSubnetsToTeams {
 				Break
 			}
 			Default {
-				Write-Host "Multiple matches found for address in $($City) $($Country)"
+				Write-Host "Multiple matches found for address in $($City) $($CountryOrRegion)"
 				$MatchFound = $FALSE
 				ForEach ($Addr in $ExistingAddresses) {
 					If ($Addr.HouseNumber -eq $HouseNumber -And
@@ -179,7 +186,7 @@ Function Copy-SfBLISSubnetsToTeams {
 						$Addr.PostalCode -eq $PostalCode) {
 						
 						$MatchFound = $TRUE
-						Write-Host "Match found for address $($HouseNumber) $($StreetName) $($StreetSuffix) $($City) $($State) $($Country)"
+						Write-Host "Match found for address $($HouseNumber) $($StreetName) $($StreetSuffix) $($City) $($State) $($CountryOrRegion)"
 
 						# Check for existing location at given civic address/location
 						$ExistingLocation = Get-CsOnlineLisLocation -CivicAddressId $Addr.CivicAddressId | Where {$_.Location -eq $Location}
@@ -198,8 +205,9 @@ Function Copy-SfBLISSubnetsToTeams {
 						Break
 					}
 				}
+				
 				If (!$MatchFound) { 
-					Write-Host "No match found for address $($HouseNumber) $($StreetName) $($StreetSuffix) $($City) $($State) $($Country)"
+					Write-Host "No match found for address $($HouseNumber) $($StreetName) $($StreetSuffix) $($City) $($State) $($CountryOrRegion)"
 					#Remove empty elements
 					$psobject.Properties | Where-Object -FilterScript { -not $_.value } | ForEach-Object -Process { $psobject.Properties.Remove($_.name) }
 
@@ -212,7 +220,7 @@ Function Copy-SfBLISSubnetsToTeams {
 					$Hash.Remove("Description")
 
 					#Get lat/long
-					$LatLong = Get-LatLong "$($HouseNumber) $($StreetName) $($StreetSuffix) $($City) $($State) $($Country)"
+					$LatLong = Get-LatLong "$($HouseNumber) $($StreetName) $($StreetSuffix) $($City) $($State) $($CountryOrRegion)"
 					$Hash.Add('Latitude', $LatLong.Latitude)
 					$Hash.Add('Longitude', $LatLong.Longitude)
 						
@@ -226,59 +234,6 @@ Function Copy-SfBLISSubnetsToTeams {
 				}
 			}
 		}
-	}
-}
-
-
-
-Function Remove-TeamsLISConfig {
-	<#
-		.SYNOPSIS
-		Removes all Teams LIS information
-
-		.DESCRIPTION
-		Removes all Teams LIS information. Does not affect any object that is tied to a user account or phone number. 
-		
-		.NOTES
-		Version 1.00
-		Build: Oct 18, 2020
-		Copyright © 2020  Ken Lasko
-		klasko@ucdialplans.com
-		https://www.ucdialplans.com
-	#>
-	
-	Write-Host 'This command will remove all Teams LIS configuration settings and cannot be undone.'
-	Write-Host 'It will not remove any entities that are tied to a user or phone number'
-	Write-Host
-	Write-Host 'To confirm, press C, then ENTER'
-	Write-Host 'To exit, press any other key followed by ENTER'
-	Write-Host
-	$Confirm = Read-Host 'Confirm?'
-
-	If ($Confirm -match "[Cc]") {
-		Write-Host 'Removing Teams LIS config...'
-		$Subnets = Get-CsOnlineLisSubnet
-		Foreach ($Subnet in $Subnets){Remove-CsOnlineLisSubnet -Subnet $Subnet.Subnet}
-
-		$Ports = Get-CsOnlineLisPort
-		Foreach ($Port in $Ports){Remove-CsOnlineLisPort -PortID $Port.PortID}
-
-		$Ports = Get-CsOnlineLisPort
-		Foreach ($Port in $Ports){Remove-CsOnlineLisPort -PortID $Port.PortID}
-
-		$Switches = Get-CsOnlineLisSwitch
-		Foreach ($Switch in $Switches){Remove-CsOnlineLisSwitch -ChassisID $Switch.ChassisID}
-
-		$WAPs = Get-CsOnlineLisWirelessAccessPoint
-		Foreach ($WAP in $WAPs){Remove-CsOnlineLisWirelessAccessPoint -BSSID $WAP.BSSID}
-
-		$Locations = Get-CsOnlineLisLocation
-		Foreach ($Loc in $Locations) {Remove-CsOnlineLisLocation -LocationID $Loc.LocationID -ErrorAction Continue}
-
-		$Addresses = Get-CsOnlineLisCivicAddress
-		ForEach ($Addr in $Addresses){Remove-CsOnlineLisCivicAddress -CivicAddressID $Addr.CivicAddressID -ErrorAction Continue}
-		
-		Write-Host 'Done!'
 	}
 }
 
