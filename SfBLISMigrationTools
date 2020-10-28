@@ -101,7 +101,7 @@ Function Copy-SfBLISSubnetsToTeams {
 	
 	Begin {
 		If ((Get-PSSession | Where-Object -FilterScript {
-				 $_.ComputerName -eq 'api.interfaces.records.teams.microsoft.com'
+				 $_.ComputerName -eq 'api.interfaces.records.teams.microsoft.com' -Or $_.ComputerName -like '*.online.lync.com'
 		}).State -eq 'Opened') {
 			Write-Host -Object 'Using existing session credentials'
 		} 
